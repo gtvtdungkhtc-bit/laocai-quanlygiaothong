@@ -1,6 +1,11 @@
-const CACHE = 'htgtnt-v1';
+const CACHE = 'htgtnt-v2';
+const BASE  = '/laocai-quanlygiaothong';
 const SHELL = [
-  '/index.html', '/style.css', '/app.js', '/config.js',
+  BASE + '/',
+  BASE + '/index.html',
+  BASE + '/style.css',
+  BASE + '/app.js',
+  BASE + '/config.js',
   'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js'
 ];
 
@@ -19,10 +24,10 @@ self.addEventListener('activate', e => {
 });
 
 self.addEventListener('fetch', e => {
-  // Không cache Firebase / Google APIs — luôn online
   const url = e.request.url;
   if (url.includes('firestore') || url.includes('googleapis') ||
-      url.includes('gstatic') || url.includes('maps')) return;
+      url.includes('gstatic') || url.includes('firebase') ||
+      url.includes('arcgisonline') || url.includes('openstreetmap')) return;
 
   e.respondWith(
     fetch(e.request).catch(() => caches.match(e.request))
