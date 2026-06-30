@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#1565c0">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="HTGTNT LC">
+  <title>Quản lý HTGT Nông thôn — Lào Cai</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- ══════════════════════════════════════════════════════════
+     MÀN HÌNH ĐĂNG NHẬP
+══════════════════════════════════════════════════════════ -->
+<div id="screen-login">
+  <div class="login-card">
+    <div class="login-logo">🗺️</div>
+    <div class="login-title">Quản lý Hạ tầng<br>Giao thông Nông thôn</div>
+    <div class="login-sub">Phòng Quản lý giao thông — Sở Xây dựng Lào Cai</div>
+    <div class="badge-firebase">📡 Đồng bộ thời gian thực — Firebase</div>
+    <div class="form-group">
+      <div class="f-label">TÀI KHOẢN (EMAIL)</div>
+      <input id="inp-user" class="f-input" type="email" autocomplete="username" placeholder="Nhập email đăng nhập...">
+    </div>
+    <div class="form-group">
+      <div class="f-label">MẬT KHẨU</div>
+      <input id="inp-pass" class="f-input" type="password" autocomplete="current-password" placeholder="Nhập mật khẩu...">
+    </div>
+    <button id="btn-login" class="btn-login">🔐 Đăng nhập</button>
+    <div id="login-error" class="login-error"></div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════
+     APP CHÍNH
+══════════════════════════════════════════════════════════ -->
+<div id="screen-app" hidden>
+
+  <!-- TOPBAR -->
+  <nav id="topbar">
+    <span class="logo">🗺️</span>
+    <span class="title">HTGT Nông thôn<small id="topbar-xa">Lào Cai</small></span>
+    <span id="sync-dot" class="sync-dot"></span>
+    <button id="btn-logout" class="user-btn">👤 <span id="topbar-user"></span></button>
+  </nav>
+
+  <!-- ══ TAB: BẢN ĐỒ ══════════════════════════════════════ -->
+  <div id="tab-map" class="tab-content active">
+    <div id="map"></div>
+
+    <!-- Admin: lọc theo xã trên bản đồ -->
+    <div id="map-user-filter" class="map-user-filter no-admin">
+      <select id="filter-xa-select" onchange="filterByXa(this.value)">
+        <option value="all">🗺️ Toàn tỉnh</option>
+      </select>
+    </div>
+
+    <!-- Chú giải -->
+    <div id="map-legend">
+      <h4>CHÚ GIẢI</h4>
+      <!-- Tự động điền bởi JS -->
+    </div>
+
+    <!-- GPS Controls -->
+    <div id="gps-panel">
+      <button id="btn-start-track" class="btn-gps primary">▶ Ghi vết</button>
+      <button id="btn-stop-track"  class="btn-gps danger"  disabled>⏹ Dừng</button>
+      <button id="btn-add-pt"      class="btn-gps success" disabled>📍 Điểm</button>
+      <button id="btn-my-loc"      class="btn-gps neutral">🎯 Vị trí</button>
+      <div id="gps-status">Chọn đoạn tuyến rồi nhấn "Ghi vết"</div>
+    </div>
+  </div>
+
+  <!-- ══ TAB: DANH SÁCH ════════════════════════════════════ -->
+  <div id="tab-list" class="tab-content">
+    <div class="list-toolbar">
+      <input id="search-input" class="search-input" type="search" placeholder="🔍 Tìm tuyến, đoạn, xã...">
+      <span id="road-count" class="count-badge">0</span>
+    </div>
+
+    <!-- Filter loại đường -->
+    <div style="padding:8px 8px 0;display:flex;gap:5px;flex-wrap:wrap;background:#fff;border-bottom:1px solid #eee;">
+      <button class="filter-chip active" data-loai="all">Tất cả</button>
+      <button class="filter-chip" data-loai="Quốc lộ">Quốc lộ</button>
+      <button class="filter-chip" data-loai="Đường tỉnh">Tỉnh</button>
+      <button class="filter-chip" data-loai="Đường xã">Xã</button>
+      <button class="filter-chip" data-loai="Đường đô thị">Đô thị</button>
+      <button class="filter-chip" data-loai="Đường thôn">Thôn</button>
+      <button class="filter-chip" data-loai="Đường ngõ xóm">Ngõ xóm</button>
+    </div>
+
+    <div id="route-list" style="padding-bottom:70px;"></div>
+
+    <!-- FAB thêm tuyến mới -->
+    <button class="btn-add-float" id="btn-fab-add" title="Thêm tuyến / đoạn">＋</button>
+  </div>
+
+  <!-- ══ TAB: THÊM / SỬA ══════════════════════════════════ -->
+  <div id="tab-form" class="tab-content">
+    <!-- Toggle: Tuyến / Đoạn -->
+    <div class="form-type-bar">
+      <button class="form-type-btn active" id="ftab-tuyen" onclick="switchFormTab('tuyen')">🛣️ Tuyến đường</button>
+      <button class="form-type-btn"        id="ftab-doan"  onclick="switchFormTab('doan')">📏 Đoạn tuyến</button>
+    </div>
+
+    <!-- ─── FORM TUYẾN ĐƯỜNG ─── -->
+    <div id="form-tuyen" class="form-wrap">
+      <h2 id="form-tuyen-title" style="font-size:15px;font-weight:700;color:#1565c0;margin-bottom:12px;">Thêm tuyến đường</h2>
+
+      <div class="form-section">
+        <div class="section-title">Thông tin tuyến đường</div>
+        <div class="form-row">
+          <div class="form-col">
+            <div class="f-label">Tên tuyến đường *</div>
+            <input id="ft-ten" class="f-input" type="text" placeholder="VD: Đường liên xã A - B">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-col">
+            <div class="f-label">Mã hiệu tuyến</div>
+            <input id="ft-ma" class="f-input" type="text" placeholder="VD: ĐX.LC.001">
+          </div>
+          <div class="form-col">
+            <div class="f-label">Năm xây dựng</div>
+            <input id="ft-nam" class="f-input" type="number" placeholder="2018">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-col">
+            <div class="f-label">Loại đường *</div>
+            <select id="ft-loai" class="f-select" onchange="updateLoaiPreview()">
+              <option value="">-- Chọn loại đường --</option>
+              <option>Quốc lộ</option>
+              <option>Đường tỉnh</option>
+              <option>Đường xã</option>
+              <option>Đường đô thị</option>
+              <option>Đường thôn</option>
+              <option>Đường ngõ xóm</option>
+            </select>
+            <div class="loai-preview" id="loai-preview" style="display:none;">
+              <div class="loai-preview-line" id="loai-preview-line"></div>
+              <span class="loai-preview-label" id="loai-preview-label"></span>
+            </div>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-col">
+            <div class="f-label">Xã / Phường</div>
+            <select id="ft-xa" class="f-select">
+              <option value="">-- Chọn xã/phường --</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-col">
+            <div class="f-label">Chiều dài tổng (km)</div>
+            <input id="ft-dai" class="f-input" type="number" step="0.001" placeholder="0.000">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-col">
+            <div class="f-label">Ghi chú</div>
+            <textarea id="ft-ghichu" class="f-textarea" placeholder="Ghi chú thêm..."></textarea>
+          </div>
+        </div>
+      </div>
+
+      <div class="form-actions">
+        <button class="btn-cancel" onclick="switchTab('list')">Huỷ</button>
+        <button id="btn-save-tuyen" class="btn-save" onclick="submitTuyen()">💾 Lưu tuyến đường</button>
+      </div>
+    </div>
+
+    <!-- ─── FORM ĐOẠN TUYẾN ─── -->
+    <div id="form-doan" class="form-wrap" style="display:none;">
+      <h2 id="form-doan-title" style="font-size:15px;font-weight:700;color:#1565c0;margin-bottom:12px;">Thêm đoạn tuyến</h2>
+
+      <div class="form-section">
+        <div class="section-title">1. Thuộc tuyến đường</div>
+        <div class="form-row">
+          <div class="form-col">
+            <div class="f-label">Tuyến đường *</div>
+            <select id="fd-tuyen" class="f-select">
+              <option value="">-- Chọn tuyến đường --</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-col">
+            <div class="f-label">Tên đoạn</div>
+            <input id="fd-ten" class="f-input" type="text" placeholder="VD: Đoạn qua thôn Bắc">
+          </div>
+          <div class="form-col">
+            <div class="f-label">Số thứ tự đoạn</div>
+            <input id="fd-stt" class="f-input" type="number" placeholder="1">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-col">
+            <div class="f-label">Lý trình từ (km)</div>
+            <input id="fd-lttu" class="f-input" type="number" step="0.001" placeholder="0.000">
+          </div>
+          <div class="form-col">
+            <div class="f-label">Lý trình đến (km)</div>
+            <input id="fd-ltden" class="f-input" type="number" step="0.001" placeholder="0.000">
+          </div>
+        </div>
+      </div>
+
+      <div class="form-section">
+        <div class="section-title">2. Kích thước &amp; kết cấu</div>
+        <div class="form-row">
+          <div class="form-col">
+            <div class="f-label">Rộng nền (m)</div>
+            <input id="fd-rnen" class="f-input" type="number" step="0.1" placeholder="5.0">
+          </div>
+          <div class="form-col">
+            <div class="f-label">Rộng mặt (m)</div>
+            <input id="fd-rmat" class="f-input" type="number" step="0.1" placeholder="3.5">
+          </div>
+          <div class="form-col">
+            <div class="f-label">Lề (m)</div>
+            <input id="fd-rle" class="f-input" type="number" step="0.1" placeholder="0.5">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-col">
+            <div class="f-label">Loại mặt đường *</div>
+            <select id="fd-mat" class="f-select">
+              <option value="BTXM">BTXM — Bê tông xi măng</option>
+              <option value="BTN">BTN — Bê tông nhựa</option>
+              <option value="Đá dăm">Đá dăm</option>
+              <option value="Đất">Đường đất</option>
+              <option value="Khác">Khác</option>
+            </select>
+          </div>
+          <div class="form-col">
+            <div class="f-label">Năm XD/SC</div>
+            <input id="fd-nam" class="f-input" type="number" placeholder="2018">
+          </div>
+        </div>
+      </div>
+
+      <div class="form-section">
+        <div class="section-title">3. Tình trạng hư hỏng</div>
+        <div class="form-row">
+          <div class="form-col">
+            <div class="f-label">Mức độ tổng thể</div>
+            <select id="fd-mucdo" class="f-select">
+              <option>Tốt</option>
+              <option>Trung bình</option>
+              <option>Xấu</option>
+              <option>Rất xấu</option>
+            </select>
+          </div>
+          <div class="form-col">
+            <div class="f-label">Diện tích HH (m²)</div>
+            <input id="fd-dientich" class="f-input" type="number" step="0.1" placeholder="0">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-col">
+            <div class="f-label">Loại hư hỏng</div>
+            <input id="fd-loaihh" class="f-input" type="text" placeholder="Nứt, ổ gà, lún, xô dồn...">
+          </div>
+        </div>
+      </div>
+
+      <div class="form-section">
+        <div class="section-title">4. Trùng tuyến &amp; ghi chú</div>
+        <div class="form-row">
+          <div class="form-col">
+            <div class="f-label">Đoạn trùng với tuyến đường</div>
+            <select id="fd-trung" class="f-select">
+              <option value="">Không trùng tuyến</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-col">
+            <div class="f-label">Ghi chú</div>
+            <textarea id="fd-ghichu" class="f-textarea" placeholder="Ghi chú thêm..."></textarea>
+          </div>
+        </div>
+      </div>
+
+      <div class="form-section">
+        <div class="section-title">5. Toạ độ GPS</div>
+        <div id="fd-coords-box" class="gps-info-box">
+          Chưa có toạ độ. Dùng nút GPS bên dưới hoặc vào tab Bản đồ → Ghi vết.
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">
+          <button class="btn-gps-form" onclick="gpsForForm()">📍 Lấy vị trí GPS</button>
+          <button class="btn-gps-form" style="border-color:#e53935;color:#e53935;" onclick="clearDoanCoords()">🗑️ Xoá toạ độ</button>
+        </div>
+        <p style="font-size:11px;color:#90a4ae;margin-top:8px;">
+          💡 Ghi vết đầy đủ: vào tab <b>Bản đồ</b> → chọn đoạn này → <b>Ghi vết</b> → đi dọc đoạn → <b>Dừng</b>.
+        </p>
+      </div>
+
+      <div class="form-actions">
+        <button class="btn-cancel" onclick="switchTab('list')">Huỷ</button>
+        <button id="btn-save-doan" class="btn-save" onclick="submitDoan()">💾 Lưu đoạn tuyến</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ TAB: QUẢN LÝ TÀI KHOẢN (Admin only) ═════════════ -->
+  <div id="tab-admin" class="tab-content">
+    <div class="admin-wrap">
+
+      <!-- Thống kê tổng quan -->
+      <div class="admin-stats">
+        <div class="stat-card">
+          <div class="stat-num" id="stat-users">0</div>
+          <div class="stat-label">Tài khoản xã</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-num" id="stat-tuyen">0</div>
+          <div class="stat-label">Tuyến đường</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-num" id="stat-doan">0</div>
+          <div class="stat-label">Đoạn tuyến</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-num" id="stat-gps">0</div>
+          <div class="stat-label">Đoạn có GPS</div>
+        </div>
+      </div>
+
+      <!-- Tạo tài khoản mới -->
+      <div class="admin-section">
+        <div class="admin-section-title">➕ Tạo tài khoản mới cho xã</div>
+        <div class="create-user-form">
+          <div class="form-row">
+            <div class="form-col">
+              <div class="f-label">Họ tên người dùng</div>
+              <input id="cu-name" class="f-input" type="text" placeholder="VD: Nguyễn Văn A">
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-col">
+              <div class="f-label">Xã / Phường</div>
+              <select id="cu-xa" class="f-select">
+                <option value="">-- Chọn xã/phường --</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-col">
+              <div class="f-label">Email đăng nhập *</div>
+              <input id="cu-email" class="f-input" type="email" placeholder="xa-tenxa@qlgt-laocai.vn">
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-col">
+              <div class="f-label">Mật khẩu *</div>
+              <div class="pw-row">
+                <div class="form-col" style="margin:0">
+                  <input id="cu-pass" class="f-input" type="text" placeholder="Tối thiểu 6 ký tự">
+                </div>
+                <button class="btn-gen-pw" onclick="genPassword()">🎲 Tạo ngẫu nhiên</button>
+              </div>
+            </div>
+          </div>
+          <button id="btn-create-user" class="btn-create" onclick="createXaUser()">
+            👤 Tạo tài khoản
+          </button>
+          <div id="create-result" class="create-result"></div>
+        </div>
+      </div>
+
+      <!-- Danh sách tài khoản -->
+      <div class="admin-section">
+        <div class="admin-section-title">👥 Danh sách tài khoản (<span id="user-list-count">0</span>)</div>
+        <div id="user-list"></div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ══ TAB: XUẤT KMZ ════════════════════════════════════ -->
+  <div id="tab-export" class="tab-content">
+    <div style="padding:12px;padding-bottom:70px;">
+      <div class="export-card">
+        <div class="export-title">📤 Xuất file KMZ</div>
+        <div class="export-desc">
+          Xuất tất cả đoạn tuyến có toạ độ GPS thành file <b>.kmz</b> để mở trực tiếp trên
+          <b>Google Earth</b> hoặc tải lên <b>Google Maps</b> dạng bản đồ tùy chỉnh.
+          Mỗi loại đường sẽ có màu và độ dày riêng biệt.
+        </div>
+
+        <div class="legend-grid">
+          <div class="legend-grid-item"><div class="legend-line" style="background:#c62828;height:7px;"></div> Quốc lộ</div>
+          <div class="legend-grid-item"><div class="legend-line" style="background:#e65100;height:5px;"></div> Đường tỉnh</div>
+          <div class="legend-grid-item"><div class="legend-line" style="background:#1565c0;height:5px;"></div> Đường xã</div>
+          <div class="legend-grid-item"><div class="legend-line" style="background:#6a1b9a;height:5px;"></div> Đường đô thị</div>
+          <div class="legend-grid-item"><div class="legend-line" style="background:#2e7d32;height:4px;"></div> Đường thôn</div>
+          <div class="legend-grid-item"><div class="legend-line" style="background:#5d4037;height:3px;"></div> Đường ngõ xóm</div>
+        </div>
+
+        <div class="f-label" style="margin-bottom:6px;">Lọc theo loại đường:</div>
+        <div class="filter-row" id="export-filter-row">
+          <button class="filter-chip active" data-loai="all">Tất cả</button>
+          <button class="filter-chip" data-loai="Quốc lộ">Quốc lộ</button>
+          <button class="filter-chip" data-loai="Đường tỉnh">Đường tỉnh</button>
+          <button class="filter-chip" data-loai="Đường xã">Đường xã</button>
+          <button class="filter-chip" data-loai="Đường đô thị">Đô thị</button>
+          <button class="filter-chip" data-loai="Đường thôn">Đường thôn</button>
+          <button class="filter-chip" data-loai="Đường ngõ xóm">Ngõ xóm</button>
+        </div>
+
+        <button id="btn-export" class="btn-export">📤 Xuất file KMZ</button>
+        <div id="export-log" class="export-log"></div>
+      </div>
+
+      <div class="export-card">
+        <div class="export-title">ℹ️ Hướng dẫn mở trên Google Earth</div>
+        <div class="export-desc" style="margin-bottom:0;">
+          <b>Máy tính:</b> Tải Google Earth Pro (miễn phí) → File → Open → chọn file .kmz<br><br>
+          <b>Điện thoại:</b> Cài Google Earth → mở file .kmz → chọn mở bằng Google Earth<br><br>
+          <b>Google Maps:</b> maps.google.com → Menu → Your places → Maps → Create map → Import → chọn .kmz
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- BOTTOM NAV -->
+  <nav id="botnav">
+    <button class="nav-btn active" data-tab="map">
+      <span class="nav-icon">🗺️</span>Bản đồ
+    </button>
+    <button class="nav-btn" data-tab="list">
+      <span class="nav-icon">📋</span>Tuyến đường
+    </button>
+    <button class="nav-btn" data-tab="form">
+      <span class="nav-icon">➕</span>Thêm mới
+    </button>
+    <button class="nav-btn" data-tab="export">
+      <span class="nav-icon">📤</span>Xuất KMZ
+    </button>
+    <button class="nav-btn no-admin" id="nav-admin" data-tab="admin">
+      <span class="nav-icon">👥</span>Tài khoản
+    </button>
+  </nav>
+</div>
+
+<!-- Toast -->
+<div id="toast"></div>
+
+<!-- Modal xác nhận xoá -->
+<div id="modal-overlay" class="modal-overlay" hidden>
+  <div class="modal-box">
+    <h3>Xác nhận xoá</h3>
+    <p id="modal-msg">Bạn có chắc muốn xoá?</p>
+    <div class="modal-actions">
+      <button class="modal-btn-cancel" onclick="qs('#modal-overlay').hidden=true">Huỷ</button>
+      <button class="modal-btn-ok" id="modal-btn-ok">Xoá</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal chuẩn bị ghi vết GPS -->
+<div id="track-setup-modal" class="modal-overlay" hidden>
+  <div class="modal-box" style="max-width:340px;">
+    <h3 style="margin-bottom:4px;">🛰️ Ghi vết GPS</h3>
+    <p style="font-size:12px;color:#607d8b;margin-bottom:14px;">Chọn đoạn tuyến trước khi bắt đầu chạy xe</p>
+
+    <div class="f-label">Thuộc tuyến đường *</div>
+    <select id="ts-tuyen" class="f-select" style="margin-bottom:10px;">
+      <option value="">-- Chọn tuyến đường --</option>
+    </select>
+
+    <div style="display:flex;gap:8px;margin-bottom:10px;">
+      <div style="flex:1">
+        <div class="f-label">Số thứ tự đoạn</div>
+        <input id="ts-stt" class="f-input" type="number" placeholder="1" min="1">
+      </div>
+      <div style="flex:1">
+        <div class="f-label">Lý trình từ (km)</div>
+        <input id="ts-lttu" class="f-input" type="number" step="0.001" placeholder="0.000">
+      </div>
+    </div>
+
+    <div class="f-label">Tên đoạn (tuỳ chọn)</div>
+    <input id="ts-ten" class="f-input" type="text" placeholder="VD: Đoạn qua thôn Bắc" style="margin-bottom:14px;">
+
+    <div style="display:flex;gap:8px;">
+      <button class="btn-cancel" style="flex:1" onclick="qs('#track-setup-modal').hidden=true">Huỷ</button>
+      <button class="btn-save" style="flex:2;background:#e53935;" id="btn-start-confirm">▶ Bắt đầu ghi</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal FAB: chọn thêm tuyến hay đoạn -->
+<div id="fab-modal" class="modal-overlay" hidden>
+  <div class="modal-box">
+    <h3 style="margin-bottom:14px;">Thêm mới</h3>
+    <div style="display:flex;flex-direction:column;gap:10px;">
+      <button class="btn-save" onclick="qs('#fab-modal').hidden=true;openNewTuyen()">🛣️ Thêm tuyến đường mới</button>
+      <button class="btn-save" style="background:#2e7d32;" onclick="qs('#fab-modal').hidden=true;openNewDoan()">📏 Thêm đoạn tuyến mới</button>
+      <button class="btn-cancel" onclick="qs('#fab-modal').hidden=true">Huỷ</button>
+    </div>
+  </div>
+</div>
+
+<!-- Scripts -->
+<script src="config.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
