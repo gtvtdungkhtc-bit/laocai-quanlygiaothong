@@ -58,8 +58,8 @@ html, body { height: 100%; font-family: 'Segoe UI', system-ui, sans-serif; font-
 
 /* ── MAP TAB ────────────────────────────────────────────────── */
 #tab-map { position:relative; overflow:hidden; }
-#map { flex:1; }
-#gps-panel { position:absolute; bottom:10px; left:50%; transform:translateX(-50%); background:#fff; border-radius:var(--radius); box-shadow:var(--shadow); padding:10px 12px; display:flex; gap:7px; align-items:center; z-index:100; flex-wrap:wrap; justify-content:center; max-width:calc(100vw - 16px); }
+#map { flex:1; min-height:0; }
+#gps-panel { position:absolute; bottom:calc(var(--botnav-h) + 8px); left:50%; transform:translateX(-50%); background:#fff; border-radius:var(--radius); box-shadow:var(--shadow); padding:10px 12px; display:flex; gap:7px; align-items:center; z-index:400; flex-wrap:wrap; justify-content:center; max-width:calc(100vw - 16px); }
 .btn-gps { padding:8px 12px; border-radius:8px; border:none; font-size:12px; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:4px; transition:all .2s; }
 .btn-gps.primary { background:var(--blue); color:#fff; }
 .btn-gps.danger  { background:var(--red); color:#fff; }
