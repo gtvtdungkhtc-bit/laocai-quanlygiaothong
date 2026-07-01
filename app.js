@@ -887,6 +887,150 @@ const qs=sel=>document.querySelector(sel);
 const dateStr=()=>{ const d=new Date(); return `${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}`; };
 
 // ============================================================
+//  IMPORT EXCEL
+// ============================================================
+const IMPORT_COLS = {
+  'Tên tuyến':       'ten',
+  'Loại đường':      'loaiDuong',
+  'Xã/Phường':       'xa',
+  'Mã hiệu':         'ma',
+  'Năm XD':          'nam',
+  'Chiều dài (km)':  'chieuDai',
+  'Ghi chú':         'ghiChu',
+};
+const LOAI_VALID = Object.keys(LOAI_DUONG);
+let _importRows = [];
+
+window.downloadExcelTemplate = function() {
+  const wb = XLSX.utils.book_new();
+  const headers = Object.keys(IMPORT_COLS);
+  const example = [
+    ['Đường liên xã A - B', 'Đường xã', 'Xã Bảo Thắng', 'ĐX.LC.001', 2018, 2.5, 'Ghi chú mẫu'],
+    ['Đường thôn Bắc', 'Đường thôn', 'Xã Phong Hải', '', 2020, 0.8, ''],
+  ];
+  const ws = XLSX.utils.aoa_to_sheet([headers, ...example]);
+  // Độ rộng cột
+  ws['!cols'] = [22,16,18,12,8,14,20].map(w => ({ wch: w }));
+  // Màu header (chỉ hỗ trợ xlsx full)
+  XLSX.utils.book_append_sheet(wb, ws, 'Danh sách tuyến');
+  XLSX.writeFile(wb, 'Mau_nhap_tuyen_duong.xlsx');
+};
+
+window.handleImportFile = function(input) {
+  const file = input.files[0]; if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const wb = XLSX.read(e.target.result, { type:'array' });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws, { defval:'' });
+      if (!rows.length) { showToast('File không có dữ liệu'); return; }
+      _importRows = rows.map((r, i) => {
+        const ten      = String(r['Tên tuyến']||'').trim();
+        const loai     = String(r['Loại đường']||'').trim();
+        const xa       = String(r['Xã/Phường']||'').trim();
+        const ma       = String(r['Mã hiệu']||'').trim();
+        const nam      = parseInt(r['Năm XD'])||null;
+        const chieuDai = parseFloat(r['Chiều dài (km)'])||null;
+        const ghiChu   = String(r['Ghi chú']||'').trim();
+        const errors   = [];
+        if (!ten)  errors.push('Thiếu tên');
+        if (!loai) errors.push('Thiếu loại đường');
+        else if (!LOAI_VALID.includes(loai)) errors.push(`Loại đường không hợp lệ: "${loai}"`);
+        return { stt:i+1, ten, loai, xa, ma, nam, chieuDai, ghiChu, errors };
+      });
+      renderImportPreview();
+    } catch(err) { showToast('Lỗi đọc file: ' + err.message); }
+  };
+  reader.readAsArrayBuffer(file);
+};
+
+function renderImportPreview() {
+  const ok  = _importRows.filter(r => !r.errors.length);
+  const err = _importRows.filter(r => r.errors.length);
+  qs('#import-summary').innerHTML =
+    `<span style="color:#2e7d32">✅ ${ok.length} tuyến hợp lệ</span>` +
+    (err.length ? `&nbsp;&nbsp;<span style="color:#c62828">⚠️ ${err.length} dòng lỗi</span>` : '');
+
+  const tableHtml = `<table class="import-table">
+    <thead><tr>
+      <th>#</th><th>Tên tuyến</th><th>Loại đường</th><th>Xã/Phường</th>
+      <th>Mã hiệu</th><th>Năm XD</th><th>Dài (km)</th><th>Trạng thái</th>
+    </tr></thead>
+    <tbody>
+    ${_importRows.map(r => `<tr class="${r.errors.length?'err-row':'ok-row'}">
+      <td>${r.stt}</td>
+      <td>${esc(r.ten)||'<i style="color:#999">trống</i>'}</td>
+      <td>${esc(r.loai)}</td>
+      <td>${esc(r.xa)}</td>
+      <td>${esc(r.ma)}</td>
+      <td>${r.nam||''}</td>
+      <td>${r.chieuDai||''}</td>
+      <td>${r.errors.length ? '❌ '+r.errors.join(', ') : '✅'}</td>
+    </tr>`).join('')}
+    </tbody></table>`;
+
+  qs('#import-preview-table').innerHTML = tableHtml;
+  qs('#import-preview').style.display = 'block';
+  qs('#btn-do-import').textContent = `⬆️ Nhập ${ok.length} tuyến hợp lệ`;
+  qs('#btn-do-import').disabled = ok.length === 0;
+}
+
+window.cancelImport = function() {
+  _importRows = [];
+  qs('#import-preview').style.display = 'none';
+  qs('#import-file').value = '';
+  qs('#import-result').innerHTML = '';
+};
+
+window.doImport = async function() {
+  const ok = _importRows.filter(r => !r.errors.length);
+  if (!ok.length) return;
+  const btn = qs('#btn-do-import');
+  btn.disabled = true; btn.textContent = '⏳ Đang nhập…';
+  const res = qs('#import-result');
+  res.innerHTML = '';
+  let success = 0, fail = 0;
+  for (const r of ok) {
+    try {
+      await tuyenCol.add({
+        ten: r.ten, loaiDuong: r.loai, xa: r.xa,
+        ma: r.ma, nam: r.nam, chieuDai: r.chieuDai, ghiChu: r.ghiChu,
+        uid: S.user.uid, createdAt: ts(),
+      });
+      success++;
+    } catch(e) { fail++; }
+  }
+  res.innerHTML = `<div style="padding:10px;border-radius:8px;background:${fail?'#fff3e0':'#e8f5e9'};color:${fail?'#e65100':'#1b5e20'};font-size:12px;">
+    ✅ Đã nhập <b>${success}</b> tuyến thành công${fail?` · ❌ ${fail} lỗi`:''}
+  </div>`;
+  btn.textContent = '✅ Hoàn tất';
+  _importRows = [];
+  qs('#import-preview').style.display = 'none';
+  qs('#import-file').value = '';
+  showToast(`✅ Đã nhập ${success} tuyến đường`);
+  setTimeout(() => { btn.disabled=false; btn.textContent='⬆️ Nhập vào hệ thống'; }, 2000);
+};
+
+// Drag & drop cho import zone
+window.addEventListener('DOMContentLoaded', () => {
+  document.addEventListener('dragover', e => {
+    if (qs('#import-drop-zone')) e.preventDefault();
+  });
+  document.addEventListener('drop', e => {
+    const zone = qs('#import-drop-zone');
+    if (!zone) return;
+    e.preventDefault();
+    const file = e.dataTransfer.files[0];
+    if (file && (file.name.endsWith('.xlsx')||file.name.endsWith('.xls'))) {
+      const inp = qs('#import-file');
+      const dt = new DataTransfer(); dt.items.add(file); inp.files = dt.files;
+      handleImportFile(inp);
+    }
+  });
+});
+
+// ============================================================
 //  BIND EVENTS
 // ============================================================
 function bindEvents() {

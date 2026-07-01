@@ -335,6 +335,34 @@
         </div>
       </div>
 
+      <!-- Import Excel tuyến đường -->
+      <div class="admin-section">
+        <div class="admin-section-title">📥 Nhập hàng loạt tuyến đường từ Excel</div>
+        <div style="font-size:12px;color:#607d8b;margin-bottom:10px;line-height:1.6;">
+          Tải file mẫu, điền danh sách tuyến đường vào Excel rồi upload lên đây.<br>
+          Hệ thống sẽ tự tạo các tuyến đường trong Firestore.
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
+          <button class="btn-gps neutral" onclick="downloadExcelTemplate()" style="font-size:12px;">
+            📄 Tải file mẫu (.xlsx)
+          </button>
+        </div>
+        <label class="import-drop-zone" id="import-drop-zone">
+          <input type="file" id="import-file" accept=".xlsx,.xls" style="display:none" onchange="handleImportFile(this)">
+          <div class="import-drop-icon">📂</div>
+          <div class="import-drop-text">Nhấn để chọn file Excel<br><small>hoặc kéo thả file vào đây</small></div>
+        </label>
+        <div id="import-preview" style="display:none;">
+          <div id="import-preview-table" style="overflow-x:auto;margin:10px 0;max-height:220px;overflow-y:auto;border:1px solid #e0e0e0;border-radius:8px;"></div>
+          <div id="import-summary" style="font-size:12px;color:#1565c0;font-weight:600;margin-bottom:8px;"></div>
+          <div style="display:flex;gap:8px;">
+            <button class="btn-cancel" onclick="cancelImport()" style="flex:1;">Huỷ</button>
+            <button class="btn-save" id="btn-do-import" onclick="doImport()" style="flex:2;">⬆️ Nhập vào hệ thống</button>
+          </div>
+        </div>
+        <div id="import-result" style="margin-top:10px;font-size:12px;"></div>
+      </div>
+
       <!-- Tạo tài khoản mới -->
       <div class="admin-section">
         <div class="admin-section-title">➕ Tạo tài khoản mới cho xã</div>
@@ -518,6 +546,7 @@
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
