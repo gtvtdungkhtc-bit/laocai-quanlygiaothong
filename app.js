@@ -143,12 +143,10 @@ function showApp() {
   qs('#topbar-user').textContent = name;
   qs('#topbar-xa').textContent   = S.isAdmin ? '👑 Quản trị viên' : (S.profile?.xa || '');
 
-  // Hiện tab admin & filter xã chỉ cho admin
-  if (S.isAdmin) {
-    qs('#nav-admin').style.display     = 'flex';
-    qs('#map-user-filter').style.display = 'block';
-    qs('#map-user-filter').classList.add('show');
-  }
+  // Hiện/ẩn tab admin & filter xã
+  qs('#nav-admin').style.display = S.isAdmin ? 'flex' : 'none';
+  qs('#map-user-filter').style.display = S.isAdmin ? 'block' : 'none';
+  if (S.isAdmin) qs('#map-user-filter').classList.add('show');
 
   initMap();
   switchTab('map');
@@ -207,14 +205,24 @@ async function saveDoan(data) {
 }
 
 async function deleteTuyen(id) {
-  const batch = db.batch();
-  batch.delete(tuyenCol.doc(id));
-  S.doan.filter(d => d.tuyenId === id).forEach(d => batch.delete(doanCol.doc(d.id)));
-  await batch.commit(); showToast('🗑️ Đã xoá tuyến và các đoạn');
+  try {
+    const batch = db.batch();
+    batch.delete(tuyenCol.doc(id));
+    S.doan.filter(d => d.tuyenId === id).forEach(d => batch.delete(doanCol.doc(d.id)));
+    await batch.commit(); showToast('🗑️ Đã xoá tuyến và các đoạn');
+  } catch(e) {
+    if (e.code === 'permission-denied') showToast('⛔ Không có quyền xoá — cần cập nhật Firestore Rules');
+    else showToast('❌ Lỗi xoá: ' + e.message);
+  }
 }
 
 async function deleteDoan(id) {
-  await doanCol.doc(id).delete(); showToast('🗑️ Đã xoá đoạn tuyến');
+  try {
+    await doanCol.doc(id).delete(); showToast('🗑️ Đã xoá đoạn tuyến');
+  } catch(e) {
+    if (e.code === 'permission-denied') showToast('⛔ Không có quyền xoá — cần cập nhật Firestore Rules');
+    else showToast('❌ Lỗi xoá: ' + e.message);
+  }
 }
 
 const ts = () => firebase.firestore.FieldValue.serverTimestamp();
@@ -853,6 +861,7 @@ function ttBadge(t) {
 }
 
 function switchTab(name) {
+  if (name === 'admin' && !S.isAdmin) return; // chặn user thường vào tab admin
   document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
   document.querySelectorAll('.nav-btn').forEach(el => el.classList.remove('active'));
   qs(`#tab-${name}`)?.classList.add('active');
