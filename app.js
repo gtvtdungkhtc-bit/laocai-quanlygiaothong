@@ -697,13 +697,16 @@ function stopTracking() {
     return;
   }
 
+  // Làm mượt tuyến trước khi lưu
+  const smoothed = smoothCoords(S.trackCoords);
+
   // Tính chiều dài đo được
   let dist = 0;
-  for (let i=1; i<S.trackCoords.length; i++) dist += haversine(S.trackCoords[i-1], S.trackCoords[i]);
+  for (let i=1; i<smoothed.length; i++) dist += haversine(smoothed[i-1], smoothed[i]);
   const km = (dist/1000).toFixed(3);
 
   // Điền sẵn form với thông tin đã chọn trước
-  S.formCoords = [...S.trackCoords];
+  S.formCoords = smoothed;
   S.editDoanId = null;
   resetDoanForm();
   if (S.trackPreset) {
@@ -720,12 +723,51 @@ function stopTracking() {
   updateGpsStatus('Hoàn tất. Đã chuyển sang form điền thông tin.');
 }
 
+const GPS_MAX_ACCURACY = 25;  // bỏ qua điểm sai số > 25m
+const GPS_MIN_DIST     = 8;   // bỏ qua điểm < 8m so với điểm trước
+
 function onGpsUpdate(pos) {
-  const ll={lat:pos.coords.latitude,lng:pos.coords.longitude};
-  S.trackCoords.push(ll); S.trackLayer.addLatLng([ll.lat,ll.lng]); S.map.panTo([ll.lat,ll.lng]);
-  if (!S.currentMarker) S.currentMarker=L.circleMarker([ll.lat,ll.lng],{radius:8,color:'#f44336',fillColor:'#f44336',fillOpacity:1}).addTo(S.map);
-  else S.currentMarker.setLatLng([ll.lat,ll.lng]);
-  updateGpsStatus(`🔴 Đang ghi — ${S.trackCoords.length} điểm | ±${Math.round(pos.coords.accuracy)}m`);
+  const acc = pos.coords.accuracy;
+  const ll  = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+
+  // 1. Lọc điểm tín hiệu kém
+  if (acc > GPS_MAX_ACCURACY) {
+    updateGpsStatus(`⚠️ Tín hiệu yếu ±${Math.round(acc)}m — đang chờ tín hiệu tốt hơn...`);
+    if (S.currentMarker) S.currentMarker.setLatLng([ll.lat, ll.lng]);
+    return;
+  }
+
+  // 2. Lọc điểm quá gần điểm trước (đứng yên / rung lắc)
+  if (S.trackCoords.length > 0) {
+    const last = S.trackCoords[S.trackCoords.length - 1];
+    if (haversine(last, ll) < GPS_MIN_DIST) return;
+  }
+
+  S.trackCoords.push(ll);
+  S.trackLayer.addLatLng([ll.lat, ll.lng]);
+  S.map.panTo([ll.lat, ll.lng]);
+
+  if (!S.currentMarker)
+    S.currentMarker = L.circleMarker([ll.lat,ll.lng],{radius:8,color:'#f44336',fillColor:'#f44336',fillOpacity:1}).addTo(S.map);
+  else
+    S.currentMarker.setLatLng([ll.lat, ll.lng]);
+
+  // Màu status theo độ chính xác
+  const accColor = acc <= 10 ? '🟢' : acc <= 20 ? '🟡' : '🟠';
+  updateGpsStatus(`🔴 Đang ghi — ${S.trackCoords.length} điểm ${accColor} ±${Math.round(acc)}m`);
+}
+
+// Làm mượt tuyến bằng moving average (cửa sổ 3 điểm)
+function smoothCoords(coords) {
+  if (coords.length < 5) return coords;
+  return coords.map((pt, i) => {
+    if (i === 0 || i === coords.length - 1) return pt; // giữ nguyên điểm đầu cuối
+    const prev = coords[i - 1], next = coords[i + 1];
+    return {
+      lat: (prev.lat + pt.lat * 2 + next.lat) / 4,
+      lng: (prev.lng + pt.lng * 2 + next.lng) / 4,
+    };
+  });
 }
 
 function addManualPoint() {
